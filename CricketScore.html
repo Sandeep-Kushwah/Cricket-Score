@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Street Cricket Score Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f4f4f4;
+      text-align: center;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 600px;
+      margin: 0 auto 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      color: #1a73e8;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #125ac1;
+    }
+    .buttons, .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .movement-log {
+      text-align: left;
+      padding: 10px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.05);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .popup {
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #fff;
+      padding: 25px 40px;
+      border-radius: 15px;
+      font-size: 28px;
+      font-weight: bold;
+      color: #1a73e8;
+      animation: fadeOut 1.2s ease-out forwards;
+      z-index: 1000;
+      box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    }
+    @keyframes fadeOut {
+      0% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.4); }
+    }
+    .hidden { display: none; }
+    .highlight { color: green; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h1>🏏 Street Cricket Score Tracker</h1>
+
+  <!-- Match Setup -->
+  <div class="card" id="setup">
+    <h2>Match Setup</h2>
+    <input type="number" id="oversInput" placeholder="Total Overs" min="1" />
+    <input type="number" id="team1Players" placeholder="Team 1 Players" min="1" />
+    <input type="number" id="team2Players" placeholder="Team 2 Players" min="1" />
+    <br/>
+    <button onclick="startMatch()">Start Match</button>
+    <button onclick="skipPlayers()">Skip Player Count</button>
+  </div>
+
+  <!-- Score Page -->
+  <div class="card hidden" id="scorePage">
+    <h2 id="inningTitle">Inning: Team 1 Batting</h2>
+    <h3>Team One Players : <span id="t1P"></span></h3>
+    <h3>Team two Players : <span id="t2P"></span></h3>
+    <h3 id="targetInfo" class="highlight"></h3>
+
+    <div>
+      <h2>Runs: <span id="runs">0</span></h2>
+      <h2>Wickets: <span id="wickets">0</span></h2>
+      <h2>Overs: <span id="overs">0.0</span></h2>
+    </div>
+
+    <div class="buttons">
+      <button onclick="addRun(0)">0</button>
+      <button onclick="addRun(1)">1</button>
+      <button onclick="addRun(2)">2</button>
+      <button onclick="addRun(3)">3</button>
+      <button onclick="addRun(4)">4</button>
+      <button onclick="addRun(6)">6</button>
+      <button onclick="addWicket()">Wicket</button>
+      <button onclick="addExtra('Wd')">Wide</button>
+      <button onclick="addExtra('Nb')">No Ball</button>
+    </div>
+
+    <div class="controls">
+      <button onclick="undo()">Undo</button>
+      <button onclick="reset()">Reset</button>
+    </div>
+  </div>
+
+  <!-- Movement Log -->
+  <div class="movement-log" id="movementLog">-</div>
+
+  <script>
+    let runs = 0, wickets = 0, balls = 0, totalOvers = 0;
+    let team1Players = null, team2Players = null;
+    let overMovements = [], history = [];
+    let inning = 1, team1Score = 0, team1Wickets = 0, target = 0;
+
+    function skipPlayers() {
+      team1Players = null;
+      team2Players = null;
+      startMatch(true);
+    }
+
+    function startMatch(skipped = false) {
+      totalOvers = parseInt(document.getElementById('oversInput').value);
+      if (!totalOvers || totalOvers < 1) {
+        alert("Enter valid number of overs.");
+        return;
+      }
+
+      if (!skipped) {
+        team1Players = parseInt(document.getElementById('team1Players').value);
+        team2Players = parseInt(document.getElementById('team2Players').value);
+        if (!team1Players || !team2Players) {
+          alert("Please enter player counts or use 'Skip'.");
+          return;
+        }
+      }
+
+      document.getElementById('setup').classList.add('hidden');
+      document.getElementById('scorePage').classList.remove('hidden');
+      document.getElementById('t1P').textContent = team1Players ?? '-';
+      document.getElementById('t2P').textContent = team2Players ?? '-';
+      updateDisplay();
+    }
+
+    function updateDisplay() {
+      document.getElementById('runs').textContent = runs;
+      document.getElementById('wickets').textContent = wickets;
+      let over = Math.floor(balls / 6);
+      let ball = balls % 6;
+      document.getElementById('overs').textContent = `${over}.${ball}`;
+      renderMovements();
+      checkEnd();
+    }
+
+    function addRun(run) {
+      if (isGameOver()) return;
+      runs += run;
+      recordBall(run.toString());
+      history.push({ type: 'run', value: run });
+      if (run === 4) animatePopup("Four!");
+      if (run === 6) animatePopup("Six!");
+    }
+
+    function addWicket() {
+      if (isGameOver()) return;
+      wickets++;
+      recordBall("W");
+      history.push({ type: 'wicket' });
+      animatePopup("Wicket!");
+    }
+
+    function addExtra(type) {
+      if (isGameOver()) return;
+      runs++;
+      let idx = Math.floor(balls / 6);
+      overMovements[idx] = overMovements[idx] || [];
+      overMovements[idx].push(type);
+      history.push({ type });
+      updateDisplay();
+    }
+
+    function recordBall(mark) {
+      let idx = Math.floor(balls / 6);
+      overMovements[idx] = overMovements[idx] || [];
+      overMovements[idx].push(mark);
+      balls++;
+      updateDisplay();
+    }
+
+    function renderMovements() {
+      const log = document.getElementById('movementLog');
+      if (overMovements.length === 0) {
+        log.innerHTML = '-';
+        return;
+      }
+      log.innerHTML = overMovements.map((over, i) =>
+        `<div><strong>Over ${i + 1}:</strong> ${over.join(', ')}</div>`
+      ).join('');
+    }
+
+    function undo() {
+      if (history.length === 0) return;
+      const last = history.pop();
+      if (last.type === 'run') {
+        runs -= last.value;
+        balls--;
+        overMovements[Math.floor(balls / 6)].pop();
+      } else if (last.type === 'wicket') {
+        wickets--;
+        balls--;
+        overMovements[Math.floor(balls / 6)].pop();
+      } else {
+        runs--;
+        overMovements[Math.floor(balls / 6)].pop();
+      }
+      updateDisplay();
+    }
+
+    function reset() {
+      if (confirm("Reset the whole match?")) location.reload();
+    }
+
+    function checkEnd() {
+      const maxBalls = totalOvers * 6;
+      let outLimit = (inning === 1 ? team1Players : team2Players);
+      let allOut = outLimit ? (wickets >= outLimit) : false;
+
+      if (balls >= maxBalls || allOut) {
+        if (inning === 1) {
+          team1Score = runs;
+          team1Wickets = wickets;
+          target = runs + 1;
+          animatePopup("Innings Over");
+          setTimeout(() => {
+            inning = 2;
+            runs = 0; wickets = 0; balls = 0;
+            overMovements = []; history = [];
+            document.getElementById('inningTitle').textContent = "Inning: Team 2 Batting";
+            document.getElementById('targetInfo').textContent = `Target: ${target} runs || Team one : ${team1Score}/${team1Wickets}`;
+            // document.getElementById('targetIngo').textContent = `(${over}.${ball})`;
+            updateDisplay();
+          }, 1000);
+        } else {
+          animatePopup("Match Over");
+        }
+      }
+    }
+
+    function isGameOver() {
+      const maxBalls = totalOvers * 6;
+      const players = (inning === 1 ? team1Players : team2Players);
+      return (balls >= maxBalls) || (players ? wickets >= players : false);
+    }
+
+    function animatePopup(text) {
+      const popup = document.createElement('div');
+      popup.className = 'popup';
+      popup.textContent = text;
+      document.body.appendChild(popup);
+      setTimeout(() => popup.remove(), 1200);
+    }
+  </script>
+</body>
+</html>
